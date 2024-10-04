@@ -13,14 +13,15 @@ for entry in content:
         tx_id = entry.split()[1][:-1]
         data_dict[tx_id] = ["redo"]
     elif entry.startswith('<CKPT'):
-        keys_to_delete = [key for key, value in data_dict.items() if value == ["redo"]]
-        for key in keys_to_delete:
-            for entry in content:
-                if entry.startswith(f'<{key}'):
-                    value_dict[entry.split()[1]] = entry.split()[3][:-1]
-                    del data_dict[key]
-                    break
-            
+        if any("<END CKPT>" in line for line in content[content.index(entry):]):
+            keys_to_delete = [key for key, value in data_dict.items() if value == ["redo"]]
+            for key in keys_to_delete:
+                for entry in content:
+                    if entry.startswith(f'<{key}'):
+                        value_dict[entry.split()[1]] = entry.split()[3][:-1]
+                        del data_dict[key]
+                        break
+
             
 
 print("Undo Keys:")
