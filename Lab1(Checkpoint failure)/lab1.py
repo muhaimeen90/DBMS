@@ -40,13 +40,19 @@ for key in data_dict:
     if data_dict[key] == ["undo"]:
         for entry in content:
             if entry.startswith(f'<{key}'):
-                value_dict[entry.split()[1]] = entry.split()[2]
+                if entry.split()[1] in value_dict:
+                    value_dict[entry.split()[1]] += ", " + entry.split()[2] + " (undo)"
+                else:
+                    value_dict[entry.split()[1]] = entry.split()[2] + " (undo)"
                 break
                 
     elif data_dict[key] == ["redo"]:
         for entry in content:
             if entry.startswith(f'<{key}'):
-                value_dict[entry.split()[1]] = entry.split()[3][:-1]
+                if entry.split()[1] in value_dict:
+                    value_dict[entry.split()[1]] += ", " + entry.split()[3][:-1] + " (redo)"
+                else:
+                    value_dict[entry.split()[1]] = entry.split()[3][:-1] + " (redo)"
                 break
 
 
