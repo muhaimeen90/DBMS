@@ -106,15 +106,40 @@ int main()
         }
     }
 
+    // for (int i = 0; i < transactions.size(); i++)
+    // {
+    //     if (transactions[i].second.substr(0, 1) == "W")
+    //     {
+    //         for (int j = 0; j < i; j++)
+    //         {
+    //             if (transactions[j].second[2] == transactions[i].second[2] && transactions[i].first[1] != transactions[j].first[1])
+    //             {
+    //                 graph[stoi(transactions[j].first.substr(1)) - 1][stoi(transactions[i].first.substr(1)) - 1] = 1;
+    //             }
+    //         }
+    //     }
+    // }
+    
     for (int i = 0; i < transactions.size(); i++)
     {
         if (transactions[i].second.substr(0, 1) == "W")
         {
-            for (int j = 0; j < i; j++)
+            for (int j = i; j < transactions.size(); j++)
             {
                 if (transactions[j].second[2] == transactions[i].second[2] && transactions[i].first[1] != transactions[j].first[1])
                 {
-                    graph[stoi(transactions[j].first.substr(1)) - 1][stoi(transactions[i].first.substr(1)) - 1] = 1;
+                    graph[stoi(transactions[i].first.substr(1)) - 1][stoi(transactions[j].first.substr(1)) - 1] = 1;
+                }
+
+            }
+        }
+        else if (transactions[i].second.substr(0, 1) == "R")
+        {
+            for (int j = i; j < transactions.size(); j++)
+            {
+                if (transactions[j].second[2] == transactions[i].second[2] && transactions[i].first[1] != transactions[j].first[1] && transactions[j].second.substr(0, 1) == "W")
+                {
+                    graph[stoi(transactions[i].first.substr(1)) - 1][stoi(transactions[j].first.substr(1)) - 1] = 1;
                 }
             }
         }
