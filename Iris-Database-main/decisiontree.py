@@ -4,6 +4,7 @@ import seaborn as sns
 from sklearn.model_selection import KFold
 from sklearn.metrics import f1_score, fbeta_score
 import math
+from sklearn.metrics import precision_score, recall_score
 
 def is_pure(dataset):
     labels = dataset[:, -1]
@@ -38,7 +39,7 @@ def compute_entropy(subset):
     probabilities = counts / counts.sum()
     return -sum(probabilities * np.log2(probabilities))
 
-def combined_entropy(left_split, right_split):
+def information_gain(left_split, right_split):
     total = len(left_split) + len(right_split)
     left_ratio = len(left_split) / total
     right_ratio = len(right_split) / total
@@ -52,7 +53,7 @@ def best_split(dataset, candidates):
     for col_idx in candidates:
         for val in candidates[col_idx]:
             left, right = subset_data(dataset, col_idx, val)
-            curr_entropy = combined_entropy(left, right)
+            curr_entropy = information_gain(left, right)
             if curr_entropy < lowest_entropy:
                 lowest_entropy = curr_entropy
                 split_col = col_idx
@@ -137,22 +138,21 @@ def compute_f1_f2(true_values, predicted_values):
     print("F1 measure:", f1)
     print("F2 measure:", f2)
 
-def calculate_d2h(data, goals, feature_ranges):
-    # Normalize features
-    for feat, objective in goals.items():
-        mn, mx = feature_ranges[feat]
-        data[feat + "_norm"] = (data[feat] - mn) / (mx - mn)
-        if objective == "min":
-            data[feat + "_norm"] = 1 - data[feat + "_norm"]
-    # Define heaven point
-    heaven = {feat + "_norm": (1 if obj == "max" else 0) for feat, obj in goals.items()}
-    # Calculate Euclidean distance
-    def distance_to_heaven(row):
-        return sum((heaven[col] - row[col])**2 for col in heaven)**0.5
-    data["d2h"] = data.apply(distance_to_heaven, axis=1)
-    # Normalize and compute mean
-    data["d2h_final"] = data["d2h"] / math.sqrt(len(goals))
-    print("Mean d2h:", data["d2h_final"].mean())
+def calculate_d2h_precision_recall(data, true_labels, predicted_labels):
+
+    precision = precision_score(true_labels, predicted_labels, average='macro')
+    recall = recall_score(true_labels, predicted_labels, average='macro')
+
+    precision_norm = precision
+    recall_norm = recall
+
+    heaven = {"precision_norm": 1, "recall_norm": 1}
+
+    d2h = math.sqrt((heaven["precision_norm"] - precision_norm)**2 +
+                    (heaven["recall_norm"] - recall_norm)**2)
+    d2h_final = d2h / math.sqrt(2)
+
+    print("d2h for precision and recall:", d2h_final)
 
 iris_data = sns.load_dataset("iris")
 k_folds = 10
@@ -175,4 +175,4 @@ feature_ranges = {
     "petal_width": (iris_data["petal_width"].min(), iris_data["petal_width"].max())
 }
 
-calculate_d2h(iris_data, goals, feature_ranges)
+calculate_d2h_precision_recall(iris_data, iris_data["species"], iris_data["prediction"])
