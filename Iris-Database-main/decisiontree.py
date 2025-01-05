@@ -46,6 +46,33 @@ def information_gain(left_split, right_split):
     return (left_ratio * compute_entropy(left_split)
             + right_ratio * compute_entropy(right_split))
 
+def best_split_fdr(dataset):
+    
+    labels = np.unique(dataset[:, -1])
+    best_feature = None
+    best_fdr = float('-inf')
+    
+    for col_idx in range(dataset.shape[1] - 1):
+        overall_mean = np.mean(dataset[:, col_idx])
+        between_var = 0
+        within_var = 0
+
+        for label in labels:
+            class_data = dataset[dataset[:, -1] == label, col_idx]
+            class_mean = np.mean(class_data)
+            between_var += len(class_data) * (class_mean - overall_mean)**2
+            within_var += np.sum((class_data - class_mean)**2)
+
+        if within_var == 0:
+            continue
+        fdr = between_var / within_var
+        if fdr > best_fdr:
+            best_fdr = fdr
+            best_feature = col_idx
+
+    best_threshold = np.mean(dataset[:, best_feature])
+    return best_feature, best_threshold
+
 def best_split(dataset, candidates):
     lowest_entropy = float("inf")
     split_col = None
@@ -72,7 +99,8 @@ def build_tree(df, current_depth=0, min_size=2, max_depth=5):
         return get_majority_label(data)
     current_depth += 1
     candidates = collect_candidate_splits(data)
-    col, val = best_split(data, candidates)
+   # col, val = best_split(data, candidates)
+    col, val = best_split_fdr(data)
     left, right = subset_data(data, col, val)
     feature_name = HEADERS[col]
     tree_query = f"{feature_name} <= {val}"
@@ -160,19 +188,4 @@ cross_validate_model(iris_data, k_folds)
 tree = build_tree(iris_data, max_depth=3)
 iris_data["prediction"] = iris_data.apply(predict_example, axis=1, args=(tree,))
 compute_f1_f2(iris_data["species"], iris_data["prediction"])
-
-goals = {
-    "sepal_length": "max",
-    "sepal_width": "max",
-    "petal_length": "max",
-    "petal_width": "max"
-}
-
-feature_ranges = {
-    "sepal_length": (iris_data["sepal_length"].min(), iris_data["sepal_length"].max()),
-    "sepal_width": (iris_data["sepal_width"].min(), iris_data["sepal_width"].max()),
-    "petal_length": (iris_data["petal_length"].min(), iris_data["petal_length"].max()),
-    "petal_width": (iris_data["petal_width"].min(), iris_data["petal_width"].max())
-}
-
 calculate_d2h_precision_recall(iris_data, iris_data["species"], iris_data["prediction"])
