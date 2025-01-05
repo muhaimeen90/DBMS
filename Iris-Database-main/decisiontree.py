@@ -3,6 +3,7 @@ import pandas as pd
 import seaborn as sns
 from sklearn.model_selection import KFold
 from sklearn.metrics import f1_score, fbeta_score
+import math
 
 def is_pure(dataset):
     labels = dataset[:, -1]
@@ -136,11 +137,22 @@ def compute_f1_f2(true_values, predicted_values):
     print("F1 measure:", f1)
     print("F2 measure:", f2)
 
-def distance_to_heaven(df, tree):
-    df_temp = df.copy()
-    df_temp["prediction"] = df_temp.apply(predict_example, axis=1, args=(tree,))
-    dist = sum(df_temp[df_temp.columns[-2]] != df_temp["prediction"])
-    print("Distance to heaven:", dist)
+def calculate_d2h(data, goals, feature_ranges):
+    # Normalize features
+    for feat, objective in goals.items():
+        mn, mx = feature_ranges[feat]
+        data[feat + "_norm"] = (data[feat] - mn) / (mx - mn)
+        if objective == "min":
+            data[feat + "_norm"] = 1 - data[feat + "_norm"]
+    # Define heaven point
+    heaven = {feat + "_norm": (1 if obj == "max" else 0) for feat, obj in goals.items()}
+    # Calculate Euclidean distance
+    def distance_to_heaven(row):
+        return sum((heaven[col] - row[col])**2 for col in heaven)**0.5
+    data["d2h"] = data.apply(distance_to_heaven, axis=1)
+    # Normalize and compute mean
+    data["d2h_final"] = data["d2h"] / math.sqrt(len(goals))
+    print("Mean d2h:", data["d2h_final"].mean())
 
 iris_data = sns.load_dataset("iris")
 k_folds = 10
@@ -148,4 +160,19 @@ cross_validate_model(iris_data, k_folds)
 tree = build_tree(iris_data, max_depth=3)
 iris_data["prediction"] = iris_data.apply(predict_example, axis=1, args=(tree,))
 compute_f1_f2(iris_data["species"], iris_data["prediction"])
-distance_to_heaven(iris_data, tree)
+
+goals = {
+    "sepal_length": "max",
+    "sepal_width": "max",
+    "petal_length": "max",
+    "petal_width": "max"
+}
+
+feature_ranges = {
+    "sepal_length": (iris_data["sepal_length"].min(), iris_data["sepal_length"].max()),
+    "sepal_width": (iris_data["sepal_width"].min(), iris_data["sepal_width"].max()),
+    "petal_length": (iris_data["petal_length"].min(), iris_data["petal_length"].max()),
+    "petal_width": (iris_data["petal_width"].min(), iris_data["petal_width"].max())
+}
+
+calculate_d2h(iris_data, goals, feature_ranges)
