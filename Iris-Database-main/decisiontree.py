@@ -1,172 +1,151 @@
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import random
 from sklearn.model_selection import KFold
+from sklearn.metrics import f1_score, fbeta_score
 
-# Load the iris dataset
-iris = sns.load_dataset("iris")
-# print(iris)
-# Function to check purity
-def check_purity(data):
-    label_column = data[:, -1]
-    unique_classes = np.unique(label_column)
-    if len(unique_classes) == 1:
-        return True
-    return False
+def is_pure(dataset):
+    labels = dataset[:, -1]
+    return len(np.unique(labels)) == 1
 
-# Function to classify data
-def classify_data(data):
-    label_column = data[:, -1]
-    unique_classes, counts_unique_classes = np.unique(label_column, return_counts=True)
-    classification = unique_classes[counts_unique_classes.argmax()]
-    return classification
+def get_majority_label(dataset):
+    labels = dataset[:, -1]
+    unique_labels, counts = np.unique(labels, return_counts=True)
+    return unique_labels[counts.argmax()]
 
-# Function to get potential splits
-def get_potential_splits(data):
-    potential_splits = {}
-    _, n_columns = data.shape
-    for column_index in range(n_columns - 1):
-        potential_splits[column_index] = []
-        values = data[:, column_index]
-        unique_values = np.unique(values)
-        for index in range(len(unique_values)):
-            if index != 0:
-                current_value = unique_values[index]
-                previous_value = unique_values[index - 1]
-                potential_split = (current_value + previous_value) / 2
-                potential_splits[column_index].append(potential_split)
-    return potential_splits
+def collect_candidate_splits(dataset):
+    _, cols = dataset.shape
+    candidate_splits = {}
+    for col_idx in range(cols - 1):
+        candidate_splits[col_idx] = []
+        col_vals = dataset[:, col_idx]
+        distinct_vals = np.unique(col_vals)
+        for i in range(1, len(distinct_vals)):
+            candidate = (distinct_vals[i] + distinct_vals[i - 1]) / 2
+            candidate_splits[col_idx].append(candidate)
+    return candidate_splits
 
-# Function to split data
-def split_data(data, split_column, split_value):
-    split_column_values = data[:, split_column]
-    data_below = data[split_column_values <= split_value]
-    data_above = data[split_column_values > split_value]
-    return data_below, data_above
+def subset_data(dataset, col_idx, threshold):
+    col_vals = dataset[:, col_idx]
+    left_split = dataset[col_vals <= threshold]
+    right_split = dataset[col_vals > threshold]
+    return left_split, right_split
 
-# Function to calculate entropy
-def calculate_entropy(data):
-    label_column = data[:, -1]
-    _, counts = np.unique(label_column, return_counts=True)
+def compute_entropy(subset):
+    labels = subset[:, -1]
+    _, counts = np.unique(labels, return_counts=True)
     probabilities = counts / counts.sum()
-    entropy = sum(probabilities * -np.log2(probabilities))
-    return entropy
+    return -sum(probabilities * np.log2(probabilities))
 
-# Function to calculate overall entropy
-def calculate_overall_entropy(data_below, data_above):
-    n = len(data_below) + len(data_above)
-    p_data_below = len(data_below) / n
-    p_data_above = len(data_above) / n
-    overall_entropy = (p_data_below * calculate_entropy(data_below) + p_data_above * calculate_entropy(data_above))
-    return overall_entropy
+def combined_entropy(left_split, right_split):
+    total = len(left_split) + len(right_split)
+    left_ratio = len(left_split) / total
+    right_ratio = len(right_split) / total
+    return (left_ratio * compute_entropy(left_split)
+            + right_ratio * compute_entropy(right_split))
 
-# Function to determine the best split
-def determine_best_split(data, potential_splits):
-    overall_entropy = 999
-    for column_index in potential_splits:
-        for value in potential_splits[column_index]:
-            data_below, data_above = split_data(data, split_column=column_index, split_value=value)
-            current_overall_entropy = calculate_overall_entropy(data_below, data_above)
-            if current_overall_entropy <= overall_entropy:
-                overall_entropy = current_overall_entropy
-                best_split_column = column_index
-                best_split_value = value
-    return best_split_column, best_split_value
+def best_split(dataset, candidates):
+    lowest_entropy = float("inf")
+    split_col = None
+    split_val = None
+    for col_idx in candidates:
+        for val in candidates[col_idx]:
+            left, right = subset_data(dataset, col_idx, val)
+            curr_entropy = combined_entropy(left, right)
+            if curr_entropy < lowest_entropy:
+                lowest_entropy = curr_entropy
+                split_col = col_idx
+                split_val = val
+    return split_col, split_val
 
-# Decision tree algorithm
-def decision_tree_algorithm(df, counter=0, min_samples=2, max_depth=5):
-    if counter == 0:
-        global COLUMN_HEADERS
-        COLUMN_HEADERS = df.columns
+def build_tree(df, current_depth=0, min_size=2, max_depth=5):
+    global HEADERS
+    if current_depth == 0:
+        HEADERS = df.columns
         data = df.values
     else:
         data = df
-        
-    if (check_purity(data)) or (len(data) < min_samples) or (counter == max_depth):
-        classification = classify_data(data)
-        return classification
-    else:
-        counter += 1
-        potential_splits = get_potential_splits(data)
-        split_column, split_value = determine_best_split(data, potential_splits)
-        data_below, data_above = split_data(data, split_column, split_value)
-        feature_name = COLUMN_HEADERS[split_column]
-        question = "{} <= {}".format(feature_name, split_value)
-        sub_tree = {question: []}
-        yes_answer = decision_tree_algorithm(data_below, counter, min_samples, max_depth)
-        no_answer = decision_tree_algorithm(data_above, counter, min_samples, max_depth)
-        if yes_answer == no_answer:
-            sub_tree = yes_answer
-        else:
-            sub_tree[question].append(yes_answer)
-            sub_tree[question].append(no_answer)
-        return sub_tree
 
-# Function to classify examples
-def classify_example(example, tree):
-    question = list(tree.keys())[0]
-    feature_name, comparison_operator, value = question.split()
-    if example[feature_name] <= float(value):
-        answer = tree[question][0]
-    else:
-        answer = tree[question][1]
-    if not isinstance(answer, dict):
-        return answer
-    else:
-        residual_tree = answer
-        return classify_example(example, residual_tree)
+    if is_pure(data) or (len(data) < min_size) or (current_depth == max_depth):
+        return get_majority_label(data)
+    current_depth += 1
+    candidates = collect_candidate_splits(data)
+    col, val = best_split(data, candidates)
+    left, right = subset_data(data, col, val)
+    feature_name = HEADERS[col]
+    tree_query = f"{feature_name} <= {val}"
+    node = {tree_query: []}
 
-# Updated function to calculate accuracy
-def calculate_accuracy(df, tree):
-    df = df.copy()  # Ensure a copy of the DataFrame is used
-    df["classification"] = df.apply(classify_example, axis=1, args=(tree,))
-    df["classification_correct"] = df["classification"] == df["species"]
-    accuracy = df["classification_correct"].mean()
-    return accuracy
+    yes_branch = build_tree(left, current_depth, min_size, max_depth)
+    no_branch = build_tree(right, current_depth, min_size, max_depth)
+    if yes_branch == no_branch:
+        node = yes_branch
+    else:
+        node[tree_query].append(yes_branch)
+        node[tree_query].append(no_branch)
+    return node
 
-# k-Fold Cross-Validation
-def k_fold_cross_validation(dataframe, k):
-    kf = KFold(n_splits=k, shuffle=True)  # No fixed random_state
+def predict_example(row, tree):
+    query = list(tree.keys())[0]
+    feat, _, cutoff = query.split()
+    if row[feat] <= float(cutoff):
+        result = tree[query][0]
+    else:
+        result = tree[query][1]
+    if isinstance(result, dict):
+        return predict_example(row, result)
+    return result
+
+def evaluate_model(df, tree):
+    df = df.copy()
+    df["prediction"] = df.apply(predict_example, axis=1, args=(tree,))
+    return (df["prediction"] == df[df.columns[-2]]).mean()
+
+def cross_validate_model(df, folds):
+    splitter = KFold(n_splits=folds, shuffle=True)
     accuracies = []
-    
-    for train_index, test_index in kf.split(dataframe):
-        train_df = dataframe.iloc[train_index]
-        test_df = dataframe.iloc[test_index]
-        
-        tree = decision_tree_algorithm(train_df, max_depth=3)
-        accuracy = calculate_accuracy(test_df, tree)
-        accuracies.append(accuracy)
-        print(accuracy)
-    
-    average_accuracy = np.mean(accuracies)
-    print(f"Average accuracy over {k} folds: {average_accuracy * 100:.2f}%")
-    
-def testing(example, tree):
-    question = list(tree.keys())[0]
-    feature_name, comparison_operator, value = question.split()
+    for train_idx, test_idx in splitter.split(df):
+        training_data = df.iloc[train_idx]
+        testing_data = df.iloc[test_idx]
+        model = build_tree(training_data, max_depth=3)
+        accuracies.append(evaluate_model(testing_data, model))
+        print(accuracies[-1])
+    avg = np.mean(accuracies)
+    print(f"Average accuracy over {folds} folds: {avg * 100:.2f}%")
 
-    # check for answer
-    if example[COLUMN_HEADERS.get_loc(feature_name)] <= float(value):
-        answer = tree[question][0]
+def test_prediction(sample, tree):
+    query = list(tree.keys())[0]
+    feat, _, cutoff = query.split()
+    if sample[HEADERS.get_loc(feat)] <= float(cutoff):
+        result = tree[query][0]
     else:
-        answer = tree[question][1]
+        result = tree[query][1]
+    if isinstance(result, dict):
+        return test_prediction(sample, result)
+    return result
 
-    # base case
-    if not isinstance(answer, dict):
-        return answer
-    # recursive part
-    else:
-        residual_tree = answer
-        return testing(example, residual_tree)
+def ask_input_features():
+    feats = []
+    for i in range(len(HEADERS) - 1):
+        val = float(input(f"Enter value for {HEADERS[i]}: "))
+        feats.append(val)
+    return feats
+def compute_f1_f2(true_values, predicted_values):
+    f1 = f1_score(true_values, predicted_values, average='macro')
+    f2 = fbeta_score(true_values, predicted_values, beta=2, average='macro')
+    print("F1 measure:", f1)
+    print("F2 measure:", f2)
 
-def get_input_features():
-    input_features = []
-    for i in range(len(COLUMN_HEADERS) - 1):  # Exclude the last column (species)
-        feature_name = COLUMN_HEADERS[i]
-        value = float(input("Enter value for {}: ".format(feature_name)))
-        input_features.append(value)
-    return input_features
+def distance_to_heaven(df, tree):
+    df_temp = df.copy()
+    df_temp["prediction"] = df_temp.apply(predict_example, axis=1, args=(tree,))
+    dist = sum(df_temp[df_temp.columns[-2]] != df_temp["prediction"])
+    print("Distance to heaven:", dist)
 
-k = 5
-average_accuracy = k_fold_cross_validation(iris, k)
+iris_data = sns.load_dataset("iris")
+k_folds = 10
+cross_validate_model(iris_data, k_folds)
+tree = build_tree(iris_data, max_depth=3)
+iris_data["prediction"] = iris_data.apply(predict_example, axis=1, args=(tree,))
+compute_f1_f2(iris_data["species"], iris_data["prediction"])
+distance_to_heaven(iris_data, tree)
